@@ -2,6 +2,8 @@
 //! Game logic behind the SOS game
 //!
 
+use std::fmt::Error;
+
 /// Enumerates the possible SOS cell values
 #[derive(Clone, PartialEq, Debug)]
 pub enum Cell {EMPTY, S, O}
@@ -17,6 +19,7 @@ pub enum Turn {LEFT, RIGHT}
 /// Contains game data such as board state, game mode, and player turn
 pub struct Game {
     board: Vec<Vec<Cell>>,
+    pub board_size: usize,
     mode: Mode,
     pub turn: Turn
 }
@@ -25,9 +28,15 @@ impl Game {
     pub fn new(board_size: usize, mode: Mode) -> Self {
         Self {
             board: vec![vec![Cell::EMPTY; board_size]; board_size],
+            board_size,
             mode,
             turn: Turn::LEFT
         }
+    }
+
+    pub fn clear_grid(&mut self) {
+        self.board.clear();
+        self.board.resize(self.board_size, vec![Cell::EMPTY; self.board_size]);
     }
 
     /// Make a move on the game board
@@ -48,6 +57,13 @@ impl Game {
         }
     }
 
+    pub fn get_cell(&mut self, x: usize, y: usize) -> Result<&Cell, Error> {
+        match x < self.board.len() && y < self.board.len() {
+            true => Ok(&self.board[y][x]),
+            false => Err(Error)
+        }
+    }
+
     fn switch_turn(&mut self) {
         self.turn = match self.turn {
             Turn::LEFT => Turn::RIGHT,
@@ -65,6 +81,8 @@ mod test {
         let g = Game::new(10, Mode::SIMPLE);
         assert_eq!(g.turn, Turn::LEFT);
     }
+
+
 
     #[test]
     fn switch_turn_left_to_right() {
@@ -94,5 +112,13 @@ mod test {
         g.make_move(4, 6, Cell::S);
         g.make_move(4, 6, Cell::O);
         assert_eq!(g.board[6][4], Cell::S);
+    }
+    #[test]
+    fn clear_grid_without_changing_size() {
+        let mut g = Game::new(10, Mode::SIMPLE);
+        g.make_move(4, 6, Cell::S);
+        g.make_move(5, 5, Cell::O);
+        g.clear_grid();
+        assert_eq!(g.board, vec![vec![Cell::EMPTY; 10]; 10]);
     }
 }

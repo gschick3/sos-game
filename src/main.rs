@@ -3,8 +3,8 @@ mod game;
 use crate::game::{Mode, Game, Cell, Turn};
 use eframe::egui;
 
-const WIDTH: f32 = 600.0;
-const HEIGHT: f32 = 500.0;
+const WIDTH: f32 = 580.0;
+const HEIGHT: f32 = 410.0;
 const MIN_BUTTON_SIZE: f32 = 30.0;
 
 fn main() -> Result<(), eframe::Error> {
@@ -28,18 +28,10 @@ struct SosGame {
     mode: Mode,
     p1move: Cell,
     p2move: Cell,
-    /// Player view of the board (mirrors logical view from Game object)
-    board: Vec<Vec<char>>,
     /// Game logic object
     game: Game,
     /// True if the player has clicked Start
     playing: bool
-}
-
-impl SosGame {
-    fn reset_board(&mut self) {
-        self.board = vec![vec![' '; self.next_board_size]; self.next_board_size];
-    }
 }
 
 impl Default for SosGame {
@@ -49,7 +41,6 @@ impl Default for SosGame {
             mode: Mode::CLASSIC,
             p1move: Cell::S,
             p2move: Cell::S,
-            board: vec![vec![' '; 5]; 5],
             game: Game::new(5, Mode::CLASSIC),
             playing: false
         }
@@ -58,30 +49,28 @@ impl Default for SosGame {
 
 impl eframe::App for SosGame {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        if !self.playing {
-            egui::TopBottomPanel::top("top")
-                .resizable(false)
-                .show_separator_line(true)
-                .show(ctx, |ui| {
-                ui.horizontal_top(|ui| {
-                    ui.vertical(|ui| {
-                        ui.label("Board Size");
-                        ui.add(egui::Slider::new(&mut self.next_board_size, 3..=10));
-                    });
-                    ui.vertical(|ui| {
-                        ui.label("Mode");
-                        egui::ComboBox::from_id_source("mode")
-                            .selected_text(match self.mode {
-                                Mode::CLASSIC => "Classic",
-                                Mode::SIMPLE => "Simple"
-                            }).show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.mode, Mode::CLASSIC, "Classic");
-                            ui.selectable_value(&mut self.mode, Mode::SIMPLE, "Simple");
-                        });
+        egui::TopBottomPanel::top("top")
+            .resizable(false)
+            .show_separator_line(true)
+            .show(ctx, |ui| {
+            ui.horizontal_top(|ui| {
+                ui.vertical(|ui| {
+                    ui.label("Board Size");
+                    ui.add(egui::Slider::new(&mut self.next_board_size, 3..=10));
+                });
+                ui.vertical(|ui| {
+                    ui.label("Mode");
+                    egui::ComboBox::from_id_source("mode")
+                        .selected_text(match self.mode {
+                            Mode::CLASSIC => "Classic",
+                            Mode::SIMPLE => "Simple"
+                        }).show_ui(ui, |ui| {
+                        ui.selectable_value(&mut self.mode, Mode::CLASSIC, "Classic");
+                        ui.selectable_value(&mut self.mode, Mode::SIMPLE, "Simple");
                     });
                 });
             });
-        }
+        });
 
         egui::SidePanel::left("left")
             .resizable(false)
@@ -96,7 +85,7 @@ impl eframe::App for SosGame {
         egui::SidePanel::right("right")
             .resizable(false)
             .show_separator_line(false)
-            .exact_width(WIDTH / 8.0)
+            .exact_width(WIDTH / 6.5) // I have no idea why, but this has to be larger than the left panel
             .show(ctx, |ui| {
             ui.label("Player 2");
             ui.radio_value(&mut self.p2move, Cell::S, "S");
@@ -111,14 +100,13 @@ impl eframe::App for SosGame {
                 }));
                 if !self.playing {
                     if ui.button("Start").clicked() {
-                        self.reset_board();
+                        self.game.clear_grid();
                         self.game = Game::new(self.next_board_size.clone(), self.mode.clone());
                         self.playing = true;
                     }
-                }
-                else {
+                } else {
                     if ui.button("Reset").clicked() {
-                        self.reset_board();
+                        self.game.clear_grid();
                         self.playing = false;
                     }
                 }
@@ -126,34 +114,21 @@ impl eframe::App for SosGame {
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
-            for i in 0..self.board.len() {
+            for y in 0..self.game.board_size {
                 ui.horizontal(|ui| {
-                    for j in 0..self.board.len() {
-                        match &self.board[i][j] {
-                            ' ' => {
-                                // Make sure the game is playing before letting players make moves
-                                if ui.add(
-                                    egui::Button::new("")
-                                        .min_size(egui::vec2(MIN_BUTTON_SIZE, MIN_BUTTON_SIZE))
-                                ).clicked() && self.playing {
-                                    // The minimum size above is used so the buttons don't scaled differently between letters
-                                    let pmove = match self.game.turn {
-                                        Turn::LEFT => &self.p1move,
-                                        Turn::RIGHT => &self.p2move
-                                    };
-                                    self.game.make_move(j, i, pmove.clone());
-                                    self.board[i][j] = match pmove {
-                                        Cell::S => 'S',
-                                        Cell::O => 'O',
-                                        _ => ' '
-                                    }
-                                }
-                            }
-                            other => {
-                                // The minimum size is used so the buttons don't scaled differently between letters
-                                ui.add(egui::Button::new(format!("{}", other))
-                                    .min_size(egui::vec2(MIN_BUTTON_SIZE, MIN_BUTTON_SIZE)));
-                            }
+                    for x in 0..self.game.board_size {
+                        if ui.add(egui::Button::new(match self.game.get_cell(x, y).unwrap() {
+                            Cell::EMPTY => "",
+                            Cell::O => "O",
+                            Cell::S => "S"
+                        }).min_size(egui::vec2(MIN_BUTTON_SIZE, MIN_BUTTON_SIZE))).clicked()
+                        && self.playing {
+                            // The minimum size above is used so the buttons don't scaled differently between letters
+                            let pmove = match self.game.turn {
+                                Turn::LEFT => &self.p1move,
+                                Turn::RIGHT => &self.p2move
+                            };
+                            self.game.make_move(x, y, pmove.clone());
                         }
                     }
                 });
