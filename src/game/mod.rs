@@ -6,21 +6,22 @@ mod board;
 use board::Board;
 
 /// Enumerates the possible SOS cell values
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Cell {EMPTY, S, O}
 
 /// Enumerates the different game modes
+#[derive(Clone, PartialEq)]
 pub enum Mode {CLASSIC, SIMPLE}
 
 /// Enumerates player turns
-#[derive(Eq, PartialEq, Debug)]
+#[derive(PartialEq, Debug)]
 pub enum Turn {LEFT, RIGHT}
 
 /// Contains game data such as board state, game mode, and player turn
 pub struct Game {
     board: Board<Cell>,
     mode: Mode,
-    turn: Turn
+    pub turn: Turn
 }
 
 impl Game {
