@@ -1,6 +1,6 @@
 mod game;
 
-use crate::game::{Mode, Game, Cell, Turn};
+use crate::game::{Mode, Game, Cell, Player, State};
 use eframe::egui;
 use eframe::egui::{FontFamily, FontId, TextStyle};
 
@@ -33,20 +33,17 @@ struct SosGame {
     p1move: Cell,
     p2move: Cell,
     /// Game logic object
-    game: Game,
-    /// True if the player has clicked Start
-    playing: bool
+    game: Game
 }
 
 impl Default for SosGame {
     fn default() -> Self {
         Self {
             next_board_size: 5,
-            mode: Mode::CLASSIC,
+            mode: Mode::Classic,
             p1move: Cell::S,
             p2move: Cell::S,
-            game: Game::new(5, Mode::CLASSIC),
-            playing: false
+            game: Game::new(5, Mode::Classic)
         }
     }
 }
@@ -65,34 +62,34 @@ impl eframe::App for SosGame {
                 });
                 ui.vertical(|ui| {
                     ui.label("Mode");
-                    if !self.playing {
+                    if self.game.game_state != State::Playing {
                         egui::ComboBox::from_id_source("mode")
                             .selected_text(match self.mode {
-                                Mode::CLASSIC => "Classic",
-                                Mode::SIMPLE => "Simple"
+                                Mode::Classic => "Classic",
+                                Mode::Simple => "Simple"
                             }).show_ui(ui, |ui| {
-                            ui.selectable_value(&mut self.mode, Mode::CLASSIC, "Classic");
-                            ui.selectable_value(&mut self.mode, Mode::SIMPLE, "Simple");
+                            ui.selectable_value(&mut self.mode, Mode::Classic, "Classic");
+                            ui.selectable_value(&mut self.mode, Mode::Simple, "Simple");
                         });
                     } else {
                         let _ = ui.button(match self.mode {
-                            Mode::CLASSIC => "Classic",
-                            Mode::SIMPLE => "Simple"
+                            Mode::Classic => "Classic",
+                            Mode::Simple => "Simple"
                         });
                     }
                 });
                 ui.vertical(|ui| {
                     ui.label("");
-                    if !self.playing {
+                    if self.game.game_state != State::Playing {
                         if ui.button("Start").clicked() {
                             self.game.clear_grid();
                             self.game = Game::new(self.next_board_size.clone(), self.mode.clone());
-                            self.playing = true;
+                            self.game.game_state = State::Playing;
                         }
                     } else {
                         if ui.button("Reset").clicked() {
                             self.game.clear_grid();
-                            self.playing = false;
+                            self.game.game_state = State::NotStarted;
                         }
                     }
                 });
@@ -107,6 +104,7 @@ impl eframe::App for SosGame {
                 ui.label("Player 1");
                 ui.radio_value(&mut self.p1move, Cell::S, "S");
                 ui.radio_value(&mut self.p1move, Cell::O, "O");
+                ui.label(format!("Score: {}", self.game.left_score));
         });
 
         // Right panel contains Player 2's controls
@@ -117,14 +115,27 @@ impl eframe::App for SosGame {
                 ui.label("Player 2");
                 ui.radio_value(&mut self.p2move, Cell::S, "S");
                 ui.radio_value(&mut self.p2move, Cell::O, "O");
+                ui.label(format!("Score: {}", self.game.right_score));
         });
 
         // Bottom panel contains turn information and start/reset buttons
         egui::TopBottomPanel::bottom("bottom").show_separator_line(false).show(ctx, |ui| {
-            ui.label(format!("Turn: {}", match self.game.turn {
-                Turn::LEFT => "Player 1",
-                Turn::RIGHT => "Player 2"
-            }));
+            ui.horizontal(|ui| {
+                if self.game.game_state == State::Playing {
+                    ui.label(format!("Turn: {}", match self.game.turn {
+                        Player::Left => "Player 1",
+                        Player::Right => "Player 2"
+                    }));
+                }
+                else {
+                    ui.label(match self.game.game_state {
+                        State::LeftWin => "Left Player Wins!",
+                        State::RightWin => "Right Player Wins!",
+                        State::Tie => "Tie Game",
+                        _ => "" // State::NotStarted
+                    });
+                }
+            });
         });
 
         // Central panel contains game board
@@ -135,15 +146,15 @@ impl eframe::App for SosGame {
                 ui.horizontal(|ui| {
                     for x in 0..self.game.board_size {
                         if ui.add(egui::Button::new(match self.game.get_cell(x, y).unwrap() {
-                            Cell::EMPTY => "",
+                            Cell::Empty => "",
                             Cell::O => "O",
                             Cell::S => "S"
                         }).min_size(egui::vec2(BUTTON_SIZE, BUTTON_SIZE))).clicked()
-                        && self.playing {
+                        && self.game.game_state == State::Playing {
                             // The minimum size above is used so the buttons don't scaled differently between letters
                             let pmove = match self.game.turn {
-                                Turn::LEFT => &self.p1move,
-                                Turn::RIGHT => &self.p2move
+                                Player::Left => &self.p1move,
+                                Player::Right => &self.p2move
                             };
                             self.game.make_move(x, y, pmove.clone());
                         }
