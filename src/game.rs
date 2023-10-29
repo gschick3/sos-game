@@ -22,7 +22,6 @@ pub enum State { LeftWin, RightWin, Tie, Playing, NotStarted }
 /// Contains game data such as board state, game mode, and player turn
 pub struct Game {
     board: Vec<Vec<Cell>>, // TODO: If cell history required (i.e. who placed/scored), encapsulate Cells into structs
-    pub board_size: usize,
     pub turn: Player,
     // example trait usage: https://doc.rust-lang.org/book/ch17-03-oo-design-patterns.html
     game_type: Option<Box<dyn WinCondition>>,
@@ -36,7 +35,6 @@ impl Game {
     pub fn new(board_size: usize, mode: Mode) -> Self {
         Self {
             board: vec![vec![Cell::Empty; board_size]; board_size],
-            board_size,
             turn: Player::Left,
             game_type: match mode {
                 Mode::Classic => Some(Box::new(Classic {})),
@@ -49,9 +47,14 @@ impl Game {
         }
     }
 
+    pub fn get_board_size(&self) -> usize {
+        return self.board.len();
+    }
+
     pub fn clear_grid(&mut self) {
+        let board_len = self.board.len();
         self.board.clear();
-        self.board.resize(self.board_size, vec![Cell::Empty; self.board_size]);
+        self.board.resize(board_len, vec![Cell::Empty; board_len]);
     }
 
     /// Make a move on the game board
@@ -97,7 +100,7 @@ impl Game {
     }
 
     fn board_full(&self) -> bool {
-        self.cells_filled == self.board_size.pow(2)
+        self.cells_filled == self.board.len().pow(2)
     }
 
     fn sos_made(&mut self, x: usize, y: usize) -> u32 {
@@ -107,11 +110,11 @@ impl Game {
 
         match self.board[y][x] {
             Cell::O => {
-                if y > 0 && y < self.board_size-1 {
+                if y > 0 && y < self.board.len()-1 {
                     if self.board[y-1][x] == Cell::S && self.board[y+1][x] == Cell::S {
                         count += 1;
                     }
-                    if x > 0 && x < self.board_size-1 {
+                    if x > 0 && x < self.board.len()-1 {
                         if self.board[y-1][x+1] == Cell::S && self.board[y+1][x-1] == Cell::S {
                             count += 1;
                         }
@@ -120,7 +123,7 @@ impl Game {
                         }
                     }
                 }
-                if x > 0 && x < self.board_size-1 {
+                if x > 0 && x < self.board.len()-1 {
                     if self.board[y][x+1] == Cell::S && self.board[y][x-1] == Cell::S {
                         count += 1;
                     }
@@ -136,13 +139,13 @@ impl Game {
                             count += 1;
                         }
                     }
-                    if x < self.board_size-2 {
+                    if x < self.board.len()-2 {
                         if self.board[y-1][x+1] == Cell::O && self.board[y-2][x+2] == Cell::S {
                             count += 1;
                         }
                     }
                 }
-                if y < self.board_size-2 {
+                if y < self.board.len()-2 {
                     if self.board[y+1][x] == Cell::O && self.board[y+2][x] == Cell::S {
                         count += 1;
                     }
@@ -151,7 +154,7 @@ impl Game {
                             count += 1;
                         }
                     }
-                    if x < self.board_size-2 {
+                    if x < self.board.len()-2 {
                         if self.board[y+1][x+1] == Cell::O && self.board[y+2][x+2] == Cell::S {
                             count += 1;
                         }
@@ -162,7 +165,7 @@ impl Game {
                         count += 1;
                     }
                 }
-                if x < self.board_size-2 {
+                if x < self.board.len()-2 {
                     if self.board[y][x+1] == Cell::O && self.board[y][x+2] == Cell::S {
                         count += 1;
                     }

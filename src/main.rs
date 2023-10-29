@@ -82,7 +82,6 @@ impl eframe::App for SosGame {
                     ui.label("");
                     if self.game.game_state != State::Playing {
                         if ui.button("Start").clicked() {
-                            self.game.clear_grid();
                             self.game = Game::new(self.next_board_size.clone(), self.mode.clone());
                             self.game.game_state = State::Playing;
                         }
@@ -142,16 +141,16 @@ impl eframe::App for SosGame {
         egui::CentralPanel::default().show(ctx, |ui| {
             let style = ui.style_mut();
             style.text_styles.insert(TextStyle::Button, FontId::new(BUTTON_SIZE * 0.75, FontFamily::Proportional));
-            for y in 0..self.game.board_size {
+            for y in 0..self.game.get_board_size() {
                 ui.horizontal(|ui| {
-                    for x in 0..self.game.board_size {
+                    for x in 0..self.game.get_board_size() {
                         if ui.add(egui::Button::new(match self.game.get_cell(x, y).unwrap() {
                             Cell::Empty => "",
                             Cell::O => "O",
                             Cell::S => "S"
                         }).min_size(egui::vec2(BUTTON_SIZE, BUTTON_SIZE))).clicked()
                         && self.game.game_state == State::Playing {
-                            // The minimum size above is used so the buttons don't scaled differently between letters
+                            // The minimum size above is used so the buttons don't scale differently between letters
                             let pmove = match self.game.turn {
                                 Player::Left => &self.p1move,
                                 Player::Right => &self.p2move
