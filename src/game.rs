@@ -17,7 +17,7 @@ pub enum Mode { Classic, Simple }
 pub enum Player { Left, Right }
 
 #[derive(PartialEq, Debug)]
-pub enum State { LeftWin, RightWin, Tie, Playing, NotStarted }
+pub enum State { LeftWin, RightWin, Draw, Playing, NotStarted }
 
 /// Contains game data such as board state, game mode, and player turn
 pub struct Game {
@@ -37,8 +37,8 @@ impl Game {
             board: vec![vec![Cell::Empty; board_size]; board_size],
             turn: Player::Left,
             game_type: match mode {
-                Mode::Classic => Some(Box::new(Classic {})),
-                Mode::Simple => Some(Box::new(Simple {}))
+                Mode::Classic => Some(Box::new(ClassicGame {})),
+                Mode::Simple => Some(Box::new(SimpleGame {}))
             },
             cells_filled: 0,
             left_score: 0,
@@ -68,8 +68,7 @@ impl Game {
     /// g.make_move(4, 3, Cell::S);
     /// ```
     pub fn make_move(&mut self, x: usize, y: usize, input: Cell) {
-        // TODO: Update tests based on recent changes
-        if self.valid_cell(x, y) && self.board[y][x] == Cell::Empty {
+        if self.valid_cell(x, y) && self.board[y][x] == Cell::Empty && self.game_state == State::Playing {
             self.board[y][x] = input;
             self.cells_filled += 1;
             match self.turn {
@@ -104,8 +103,6 @@ impl Game {
     }
 
     fn sos_made(&mut self, x: usize, y: usize) -> u32 {
-        // TODO: Create tests for all cases
-
         let mut count: u32 = 0;
 
         match self.board[y][x] {
@@ -181,10 +178,9 @@ trait WinCondition {
     fn get_game_state(&self, game: &Game) -> State;
 }
 
-struct Classic {}
-impl WinCondition for Classic {
+struct ClassicGame {}
+impl WinCondition for ClassicGame {
     fn get_game_state(&self, game: &Game) -> State {
-        // TODO: Test all states
         // Game not yet over
         if !game.board_full() {
             return State::Playing;
@@ -193,25 +189,23 @@ impl WinCondition for Classic {
         // If game board is full, game is over
         if game.left_score > game.right_score {
             State::LeftWin
-        } else if game.right_score > game.right_score {
+        } else if game.right_score > game.left_score {
             State::RightWin
         } else {
-            State::Tie
+            State::Draw
         }
     }
 }
 
-struct Simple {}
-impl WinCondition for Simple {
+struct SimpleGame {}
+impl WinCondition for SimpleGame {
     fn get_game_state(&self, game: &Game) -> State {
-        // TODO: Test all states
-
         if game.left_score > game.right_score {
             return State::LeftWin;
         } else if game.right_score > game.left_score {
             return State::RightWin;
         } else if game.board_full() {
-            return State::Tie;
+            return State::Draw;
         }
 
         State::Playing
@@ -221,12 +215,6 @@ impl WinCondition for Simple {
 #[cfg(test)]
 mod test {
     use super::*;
-
-    #[test]
-    fn game_starts_in_given_mode() {
-        let g = Game::new(10, Mode::Classic);
-        assert_eq!(g.game_type, Classic {});
-    }
 
     #[test]
     fn game_starts_at_given_size() {
@@ -258,6 +246,7 @@ mod test {
     #[test]
     fn can_make_move_when_coord_empty() {
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing; // must be in Playing state before make_move is called
         g.make_move(4, 6, Cell::S);
         assert_eq!(g.board[6][4], Cell::S);
     }
@@ -266,6 +255,7 @@ mod test {
     fn switches_turn_when_valid_move_made() {
         // Game starts on Turn::LEFT
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(4, 6, Cell::S);
         assert_eq!(g.turn, Player::Right);
     }
@@ -273,6 +263,7 @@ mod test {
     #[test]
     fn do_not_make_move_when_coord_not_empty() {
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(4, 6, Cell::S);
         g.make_move(4, 6, Cell::O);
         assert_eq!(g.board[6][4], Cell::S);
@@ -282,6 +273,7 @@ mod test {
     fn does_not_switch_turn_when_coord_not_empty() {
         // Game starts on Turn::LEFT
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(4, 6, Cell::S);
         g.make_move(4, 6, Cell::O);
         assert_eq!(g.turn, Player::Right);
@@ -290,6 +282,7 @@ mod test {
     #[test]
     fn do_not_make_move_when_coord_invalid() {
         let mut g = Game::new(5, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(4, 6, Cell::S);
         assert_eq!(g.board, vec![vec![Cell::Empty; 5]; 5]);
     }
@@ -298,6 +291,7 @@ mod test {
     fn does_not_switch_turn_when_invalid_move_made() {
         // Game starts on Turn::LEFT
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(10, 6, Cell::S);
         assert_eq!(g.turn, Player::Left);
     }
@@ -305,6 +299,7 @@ mod test {
     #[test]
     fn clear_grid_does_not_change_size() {
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(4, 6, Cell::S);
         g.make_move(5, 5, Cell::O);
         g.clear_grid();
@@ -321,8 +316,119 @@ mod test {
     #[test]
     fn get_cell_in_bounds_returns_correct_value() {
         let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
         g.make_move(5, 4, Cell::S);
         let result = g.get_cell(5, 4);
         assert_eq!(result, Ok(&Cell::S));
+    }
+
+    #[test]
+    fn left_player_wins_simple_game() {
+        let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
+        g.make_move(1, 2, Cell::O); // Left
+        g.make_move(0, 1, Cell::S); // Right
+
+        g.make_move(1, 1, Cell::O); // Left
+        g.make_move(2, 2, Cell::S); // Right
+
+        g.make_move(2, 3, Cell::S); // Left
+
+        assert_eq!(g.game_state, State::LeftWin);
+    }
+
+    #[test]
+    fn right_player_wins_simple_game() {
+        let mut g = Game::new(10, Mode::Simple);
+        g.game_state = State::Playing;
+        g.make_move(1, 2, Cell::O); // Left
+        g.make_move(0, 1, Cell::S); // Right
+
+        g.make_move(1, 1, Cell::O); // Left
+        g.make_move(2, 3, Cell::S); // Right
+
+        assert_eq!(g.game_state, State::RightWin);
+    }
+
+    #[test]
+    fn players_draw_simple_game() {
+        let mut g = Game::new(3, Mode::Simple);
+        g.game_state = State::Playing;
+
+        g.make_move(0, 0, Cell::S);
+        g.make_move(0, 1, Cell::S);
+        g.make_move(0, 2, Cell::S);
+        g.make_move(1, 0, Cell::S);
+        g.make_move(1, 1, Cell::S);
+        g.make_move(1, 2, Cell::S);
+        g.make_move(2, 0, Cell::S);
+        g.make_move(2, 1, Cell::S);
+        g.make_move(2, 2, Cell::S);
+
+        assert_eq!(g.game_state, State::Draw);
+    }
+
+    #[test]
+    fn left_player_wins_classic_game() {
+        let mut g = Game::new(3, Mode::Classic);
+        g.game_state = State::Playing;
+        g.make_move(0, 0, Cell::S); // Left
+        g.make_move(0, 1, Cell::O); // Right
+
+        g.make_move(0, 2, Cell::S); // Left
+        g.make_move(1, 0, Cell::O); // Right
+
+        g.make_move(1, 1, Cell::S); // Left
+        g.make_move(1, 2, Cell::S); // Right
+
+        g.make_move(2, 0, Cell::O); // Left
+        g.make_move(2, 1, Cell::S); // Right
+
+        g.make_move(2, 2, Cell::S); // Left
+
+        assert_eq!(g.game_state, State::LeftWin);
+    }
+
+    #[test]
+    fn right_player_wins_classic_game() {
+        let mut g = Game::new(3, Mode::Classic);
+        g.game_state = State::Playing;
+        g.make_move(2, 2, Cell::S); // Left
+        g.make_move(0, 1, Cell::O); // Right
+
+        g.make_move(0, 2, Cell::S); // Left
+        g.make_move(1, 2, Cell::S); // Right
+
+        g.make_move(1, 1, Cell::S); // Left
+        g.make_move(1, 0, Cell::O); // Right
+
+        g.make_move(2, 0, Cell::O); // Left
+        g.make_move(0, 0, Cell::S); // Right
+
+        g.make_move(2, 1, Cell::S); // Left
+
+        assert_eq!(g.game_state, State::RightWin);
+    }
+
+    #[test]
+    fn players_draw_classic_game() {
+        let mut g = Game::new(3, Mode::Classic);
+        g.game_state = State::Playing;
+
+        g.make_move(0, 0, Cell::S);
+        g.make_move(0, 1, Cell::S);
+
+        g.make_move(0, 2, Cell::S);
+        g.make_move(1, 0, Cell::O);
+
+        g.make_move(1, 1, Cell::O);
+        g.make_move(1, 2, Cell::S);
+
+        g.make_move(2, 1, Cell::O);
+        g.make_move(2, 0, Cell::S);
+
+        g.make_move(2, 2, Cell::S);
+
+        assert_eq!(g.game_state, State::Draw);
     }
 }

@@ -130,7 +130,7 @@ impl eframe::App for SosGame {
                     ui.label(match self.game.game_state {
                         State::LeftWin => "Left Player Wins!",
                         State::RightWin => "Right Player Wins!",
-                        State::Tie => "Tie Game",
+                        State::Draw => "Tie Game",
                         _ => "" // State::NotStarted
                     });
                 }
