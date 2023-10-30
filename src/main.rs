@@ -128,8 +128,8 @@ impl eframe::App for SosGame {
                 }
                 else {
                     ui.label(match self.game.game_state {
-                        State::LeftWin => "Left Player Wins!",
-                        State::RightWin => "Right Player Wins!",
+                        State::LeftWin => "Player 1 Wins!",
+                        State::RightWin => "Player 2 Wins!",
                         State::Draw => "Tie Game",
                         _ => "" // State::NotStarted
                     });
@@ -143,6 +143,7 @@ impl eframe::App for SosGame {
             style.text_styles.insert(TextStyle::Button, FontId::new(BUTTON_SIZE * 0.75, FontFamily::Proportional));
             for y in 0..self.game.get_board_size() {
                 ui.horizontal(|ui| {
+                    // TODO: Scale button size with board_size so buttons always fill screen
                     for x in 0..self.game.get_board_size() {
                         if ui.add(egui::Button::new(match self.game.get_cell(x, y).unwrap() {
                             Cell::Empty => "",
