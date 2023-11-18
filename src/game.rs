@@ -3,9 +3,10 @@
 //!
 
 use std::fmt::Error;
+use rand::Rng;
 
 /// Enumerates the possible SOS cell values
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, PartialEq, Debug, Copy)]
 pub enum Cell { Empty, S, O}
 
 /// Enumerates the different game modes
@@ -14,7 +15,7 @@ pub enum Mode { Classic, Simple }
 
 /// Enumerates player turns
 #[derive(PartialEq, Debug)]
-pub enum Player { Left, Right }
+pub enum Turn { Left, Right }
 
 #[derive(PartialEq, Debug)]
 pub enum State { LeftWin, RightWin, Draw, Playing, NotStarted }
@@ -22,20 +23,20 @@ pub enum State { LeftWin, RightWin, Draw, Playing, NotStarted }
 /// Contains game data such as board state, game mode, and player turn
 pub struct Game {
     board: Vec<Vec<Cell>>, // TODO: If cell history required (i.e. who placed/scored), encapsulate Cells into structs
-    pub turn: Player,
+    pub turn: Turn,
     // example trait usage: https://doc.rust-lang.org/book/ch17-03-oo-design-patterns.html
     game_type: Option<Box<dyn WinCondition>>,
     cells_filled: usize,
     pub left_score: u32,
     pub right_score: u32,
-    pub game_state: State
+    pub state: State
 }
 
 impl Game {
     pub fn new(board_size: usize, mode: Mode) -> Self {
         Self {
             board: vec![vec![Cell::Empty; board_size]; board_size],
-            turn: Player::Left,
+            turn: Turn::Left,
             game_type: match mode {
                 Mode::Classic => Some(Box::new(ClassicGame {})),
                 Mode::Simple => Some(Box::new(SimpleGame {}))
@@ -43,7 +44,7 @@ impl Game {
             cells_filled: 0,
             left_score: 0,
             right_score: 0,
-            game_state: State::NotStarted
+            state: State::NotStarted
         }
     }
 
@@ -67,21 +68,43 @@ impl Game {
     /// let mut g = Game::new(10, Mode::Classic);
     /// g.make_move(4, 3, Cell::S);
     /// ```
-    pub fn make_move(&mut self, x: usize, y: usize, input: Cell) {
-        if self.valid_cell(x, y) && self.board[y][x] == Cell::Empty && self.game_state == State::Playing {
-            self.board[y][x] = input;
+    pub fn make_move(&mut self, row: usize, col: usize, input: Cell) {
+        if self.valid_cell(col, row) && self.board[row][col] == Cell::Empty && self.state == State::Playing {
+            self.board[row][col] = input;
             self.cells_filled += 1;
             match self.turn {
-                Player::Left => self.left_score += self.sos_made(x, y),
-                Player::Right => self.right_score += self.sos_made(x, y)
+                Turn::Left => self.left_score += self.sos_made(col, row),
+                Turn::Right => self.right_score += self.sos_made(col, row)
             }
-            self.game_state = self.game_type.as_ref().unwrap().get_game_state(self);
+            self.state = self.game_type.as_ref().unwrap().get_game_state(self);
             self.switch_turn();
         }
     }
 
-    fn valid_cell(&mut self, x: usize, y: usize) -> bool {
-        x < self.board.len() && y < self.board.len()
+    pub fn make_random_move(&mut self) {
+        if self.state != State::Playing {
+            return
+        }
+
+        let mut rng = rand::thread_rng();
+
+        let input = match rng.gen_range(0..=1) {
+            0 => Cell::S,
+            1 => Cell::O,
+            _ => Cell::Empty
+        };
+
+        let mut row = rng.gen_range(0..self.board.len());
+        let mut col = rng.gen_range(0..self.board.len());
+        while self.board[row][col] != Cell::Empty {
+            row = rng.gen_range(0..self.board.len());
+            col = rng.gen_range(0..self.board.len());
+        }
+        self.make_move(row, col, input);
+    }
+
+    fn valid_cell(&mut self, col: usize, row: usize) -> bool {
+        col < self.board.len() && row < self.board.len()
     }
 
     pub fn get_cell(&mut self, x: usize, y: usize) -> Result<&Cell, Error> {
@@ -93,8 +116,8 @@ impl Game {
 
     fn switch_turn(&mut self) {
         self.turn = match self.turn {
-            Player::Left => Player::Right,
-            Player::Right => Player::Left
+            Turn::Left => Turn::Right,
+            Turn::Right => Turn::Left
         };
     }
 
@@ -225,14 +248,14 @@ mod test {
     #[test]
     fn turn_starts_on_left() {
         let g = Game::new(10, Mode::Simple);
-        assert_eq!(g.turn, Player::Left);
+        assert_eq!(g.turn, Turn::Left);
     }
 
     #[test]
     fn switch_turn_left_to_right() {
         let mut g = Game::new(10, Mode::Simple);
         g.switch_turn();
-        assert_eq!(g.turn, Player::Right);
+        assert_eq!(g.turn, Turn::Right);
     }
 
     #[test]
@@ -240,32 +263,57 @@ mod test {
         let mut g = Game::new(10, Mode::Simple);
         g.switch_turn();
         g.switch_turn();
-        assert_eq!(g.turn, Player::Left);
+        assert_eq!(g.turn, Turn::Left);
     }
 
     #[test]
     fn can_make_move_when_coord_empty() {
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing; // must be in Playing state before make_move is called
-        g.make_move(4, 6, Cell::S);
+        g.state = State::Playing; // must be in Playing state before make_move is called
+        g.make_move(6, 4, Cell::S);
         assert_eq!(g.board[6][4], Cell::S);
+    }
+
+    #[test]
+    fn make_random_move_makes_single_move() {
+        let mut g = Game::new(10, Mode::Simple);
+        g.state = State::Playing; // must be in Playing state before make_move is called
+        g.make_random_move();
+
+        let mut count = 0;
+        for line in g.board.clone() {
+            for value in line {
+                if value != Cell::Empty {
+                    count += 1;
+                }
+            }
+        }
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn make_random_move_does_not_make_move_when_game_not_started() {
+        let mut g = Game::new(10, Mode::Simple);
+        g.make_random_move();
+
+        assert_eq!(g.board, vec![vec![Cell::Empty; 10]; 10]);
     }
 
     #[test]
     fn switches_turn_when_valid_move_made() {
         // Game starts on Turn::LEFT
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(4, 6, Cell::S);
-        assert_eq!(g.turn, Player::Right);
+        g.state = State::Playing;
+        g.make_move(6, 4, Cell::S);
+        assert_eq!(g.turn, Turn::Right);
     }
 
     #[test]
     fn do_not_make_move_when_coord_not_empty() {
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(4, 6, Cell::S);
-        g.make_move(4, 6, Cell::O);
+        g.state = State::Playing;
+        g.make_move(6, 4, Cell::S);
+        g.make_move(6, 4, Cell::O);
         assert_eq!(g.board[6][4], Cell::S);
     }
 
@@ -273,17 +321,17 @@ mod test {
     fn does_not_switch_turn_when_coord_not_empty() {
         // Game starts on Turn::LEFT
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(4, 6, Cell::S);
-        g.make_move(4, 6, Cell::O);
-        assert_eq!(g.turn, Player::Right);
+        g.state = State::Playing;
+        g.make_move(6, 4, Cell::S);
+        g.make_move(6, 4, Cell::O);
+        assert_eq!(g.turn, Turn::Right);
     }
 
     #[test]
     fn do_not_make_move_when_coord_invalid() {
         let mut g = Game::new(5, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(4, 6, Cell::S);
+        g.state = State::Playing;
+        g.make_move(6, 4, Cell::S);
         assert_eq!(g.board, vec![vec![Cell::Empty; 5]; 5]);
     }
 
@@ -291,16 +339,16 @@ mod test {
     fn does_not_switch_turn_when_invalid_move_made() {
         // Game starts on Turn::LEFT
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(10, 6, Cell::S);
-        assert_eq!(g.turn, Player::Left);
+        g.state = State::Playing;
+        g.make_move(6, 10, Cell::S);
+        assert_eq!(g.turn, Turn::Left);
     }
 
     #[test]
     fn clear_grid_does_not_change_size() {
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(4, 6, Cell::S);
+        g.state = State::Playing;
+        g.make_move(6, 4, Cell::S);
         g.make_move(5, 5, Cell::O);
         g.clear_grid();
         assert_eq!(g.board, vec![vec![Cell::Empty; 10]; 10]);
@@ -316,8 +364,8 @@ mod test {
     #[test]
     fn get_cell_in_bounds_returns_correct_value() {
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(5, 4, Cell::S);
+        g.state = State::Playing;
+        g.make_move(4, 5, Cell::S);
         let result = g.get_cell(5, 4);
         assert_eq!(result, Ok(&Cell::S));
     }
@@ -325,110 +373,110 @@ mod test {
     #[test]
     fn left_player_wins_simple_game() {
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(1, 2, Cell::O); // Left
-        g.make_move(0, 1, Cell::S); // Right
+        g.state = State::Playing;
+        g.make_move(2, 1, Cell::O); // Left
+        g.make_move(1, 0, Cell::S); // Right
 
         g.make_move(1, 1, Cell::O); // Left
         g.make_move(2, 2, Cell::S); // Right
 
-        g.make_move(2, 3, Cell::S); // Left
+        g.make_move(3, 2, Cell::S); // Left
 
-        assert_eq!(g.game_state, State::LeftWin);
+        assert_eq!(g.state, State::LeftWin);
     }
 
     #[test]
     fn right_player_wins_simple_game() {
         let mut g = Game::new(10, Mode::Simple);
-        g.game_state = State::Playing;
-        g.make_move(1, 2, Cell::O); // Left
-        g.make_move(0, 1, Cell::S); // Right
+        g.state = State::Playing;
+        g.make_move(2, 1, Cell::O); // Left
+        g.make_move(1, 0, Cell::S); // Right
 
         g.make_move(1, 1, Cell::O); // Left
-        g.make_move(2, 3, Cell::S); // Right
+        g.make_move(3, 2, Cell::S); // Right
 
-        assert_eq!(g.game_state, State::RightWin);
+        assert_eq!(g.state, State::RightWin);
     }
 
     #[test]
     fn players_draw_simple_game() {
         let mut g = Game::new(3, Mode::Simple);
-        g.game_state = State::Playing;
+        g.state = State::Playing;
 
         g.make_move(0, 0, Cell::S);
-        g.make_move(0, 1, Cell::S);
-        g.make_move(0, 2, Cell::S);
         g.make_move(1, 0, Cell::S);
-        g.make_move(1, 1, Cell::S);
-        g.make_move(1, 2, Cell::S);
         g.make_move(2, 0, Cell::S);
+        g.make_move(0, 1, Cell::S);
+        g.make_move(1, 1, Cell::S);
         g.make_move(2, 1, Cell::S);
+        g.make_move(0, 2, Cell::S);
+        g.make_move(1, 2, Cell::S);
         g.make_move(2, 2, Cell::S);
 
-        assert_eq!(g.game_state, State::Draw);
+        assert_eq!(g.state, State::Draw);
     }
 
     #[test]
     fn left_player_wins_classic_game() {
         let mut g = Game::new(3, Mode::Classic);
-        g.game_state = State::Playing;
+        g.state = State::Playing;
         g.make_move(0, 0, Cell::S); // Left
-        g.make_move(0, 1, Cell::O); // Right
-
-        g.make_move(0, 2, Cell::S); // Left
         g.make_move(1, 0, Cell::O); // Right
 
-        g.make_move(1, 1, Cell::S); // Left
-        g.make_move(1, 2, Cell::S); // Right
+        g.make_move(2, 0, Cell::S); // Left
+        g.make_move(0, 1, Cell::O); // Right
 
-        g.make_move(2, 0, Cell::O); // Left
+        g.make_move(1, 1, Cell::S); // Left
         g.make_move(2, 1, Cell::S); // Right
+
+        g.make_move(0, 2, Cell::O); // Left
+        g.make_move(1, 2, Cell::S); // Right
 
         g.make_move(2, 2, Cell::S); // Left
 
-        assert_eq!(g.game_state, State::LeftWin);
+        assert_eq!(g.state, State::LeftWin);
     }
 
     #[test]
     fn right_player_wins_classic_game() {
         let mut g = Game::new(3, Mode::Classic);
-        g.game_state = State::Playing;
+        g.state = State::Playing;
         g.make_move(2, 2, Cell::S); // Left
-        g.make_move(0, 1, Cell::O); // Right
-
-        g.make_move(0, 2, Cell::S); // Left
-        g.make_move(1, 2, Cell::S); // Right
-
-        g.make_move(1, 1, Cell::S); // Left
         g.make_move(1, 0, Cell::O); // Right
 
-        g.make_move(2, 0, Cell::O); // Left
+        g.make_move(2, 0, Cell::S); // Left
+        g.make_move(2, 1, Cell::S); // Right
+
+        g.make_move(1, 1, Cell::S); // Left
+        g.make_move(0, 1, Cell::O); // Right
+
+        g.make_move(0, 2, Cell::O); // Left
         g.make_move(0, 0, Cell::S); // Right
 
-        g.make_move(2, 1, Cell::S); // Left
+        g.make_move(1, 2, Cell::S); // Left
 
-        assert_eq!(g.game_state, State::RightWin);
+        assert_eq!(g.state, State::RightWin);
     }
 
     #[test]
     fn players_draw_classic_game() {
         let mut g = Game::new(3, Mode::Classic);
-        g.game_state = State::Playing;
+        g.state = State::Playing;
 
         g.make_move(0, 0, Cell::S);
-        g.make_move(0, 1, Cell::S);
+        g.make_move(1, 0, Cell::S);
 
-        g.make_move(0, 2, Cell::S);
-        g.make_move(1, 0, Cell::O);
+        g.make_move(2, 0, Cell::S);
+        g.make_move(0, 1, Cell::O);
 
         g.make_move(1, 1, Cell::O);
-        g.make_move(1, 2, Cell::S);
+        g.make_move(2, 1, Cell::S);
 
-        g.make_move(2, 1, Cell::O);
-        g.make_move(2, 0, Cell::S);
+        g.make_move(1, 2, Cell::O);
+        g.make_move(0, 2, Cell::S);
 
         g.make_move(2, 2, Cell::S);
 
-        assert_eq!(g.game_state, State::Draw);
+        assert_eq!(g.state, State::Draw);
     }
 }
