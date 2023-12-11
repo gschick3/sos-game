@@ -1,7 +1,14 @@
 mod game;
 mod player;
+mod game_enums;
+mod recording;
 
-use crate::game::{Mode, Game, Cell, Turn, State};
+use std::process;
+use std::thread;
+use std::time::Duration;
+use crate::game::Game;
+use crate::recording::Recording;
+use crate::game_enums::{Mode, Cell, Turn, State};
 use eframe::egui;
 use eframe::egui::{FontFamily, FontId, TextStyle};
 use crate::player::Player;
@@ -33,8 +40,8 @@ struct GameInterface {
     mode: Mode,
     player1: Player,
     player2: Player,
-    /// Game logic object
-    game: Game
+    game: Game,
+    recording: Option<Recording>
 }
 
 impl Default for GameInterface {
@@ -44,7 +51,8 @@ impl Default for GameInterface {
             mode: Mode::Classic,
             player1: Player::new(Cell::S, false),
             player2: Player::new(Cell::S, false),
-            game: Game::new(5, Mode::Classic)
+            game: Game::new(Mode::Classic, 5),
+            recording: None
         }
     }
 }
@@ -81,15 +89,50 @@ impl eframe::App for GameInterface {
                 });
                 ui.vertical(|ui| {
                     ui.label("");
-                    if self.game.state != State::Playing {
+                    if self.game.state == State::NotStarted {
                         if ui.button("Start").clicked() {
-                            self.game = Game::new(self.next_board_size.clone(), self.mode.clone());
+                            self.game = Game::new(self.mode.clone(), self.next_board_size.clone());
                             self.game.state = State::Playing;
                         }
                     } else {
                         if ui.button("Reset").clicked() {
                             self.game.clear_grid();
+                            self.recording = None;
                             self.game.state = State::NotStarted;
+                        }
+                    }
+                });
+                ui.vertical(|ui| {
+                    ui.label("");
+                    if self.game.state == State::NotStarted {
+                        if ui.button("Load").clicked() {
+                            let open_file: String;
+                            match tinyfiledialogs::open_file_dialog("Open", "", Some((&["*.sos"], ".sos"))) {
+                                Some(file) => open_file = file,
+                                None => open_file = "null".to_string(),
+                            }
+                            let recording = Recording::read_from_file(open_file).unwrap_or_else(|| {
+                                eprintln!("Error opening file.");
+                                process::exit(1);
+                            });
+                            self.next_board_size = recording.board_size;
+                            self.mode = recording.mode.clone();
+                            self.recording = Some(recording);
+                            self.player1.computer = true;
+                            self.player2.computer = true;
+
+                            self.game = Game::new(self.mode.clone(), self.next_board_size);
+                            self.game.state = State::Playing;
+                        }
+                    }
+                    else if self.game.state != State::Playing {
+                        if ui.button("Save").clicked() {
+                            let save_file: String;
+                            match tinyfiledialogs::save_file_dialog("Save", "recording.sos") {
+                                Some(file) => save_file = file,
+                                None => save_file = "null".to_string(),
+                            }
+                            self.game.recording.write_to_file(save_file);
                         }
                     }
                 });
@@ -168,7 +211,20 @@ impl eframe::App for GameInterface {
         };
 
         if current_turn.computer && self.game.state == State::Playing {
-            self.game.make_random_move();
+            match &mut self.recording {
+                None => self.game.make_random_move(),
+                Some(recording) => {
+                    let next_move = recording.next_move();
+                    match next_move {
+                        // Somehow the recording ended before the game was finished
+                        None => self.game.state = State::Draw,
+                        Some(m) => {
+                            self.game.make_move(m.cell, m.row, m.col);
+                            thread::sleep(Duration::from_millis(1500));
+                        }
+                    }
+                }
+            }
             ctx.request_repaint(); // otherwise, requires mouse movement
         }
 
@@ -190,7 +246,7 @@ impl eframe::App for GameInterface {
                         }).min_size(egui::vec2(button_size, button_size))).clicked()
                             && self.game.state == State::Playing
                             && !current_turn.computer {
-                            self.game.make_move(y, x, current_turn.pmove.clone());
+                            self.game.make_move(current_turn.pmove.clone(), y, x);
                         }
                     }
                 });

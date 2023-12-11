@@ -1,4 +1,4 @@
-use crate::game::Cell;
+use crate::game_enums::Cell;
 
 #[derive(Clone)]
 pub struct Player {
