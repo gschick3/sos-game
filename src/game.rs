@@ -61,13 +61,16 @@ impl Game {
         if self.valid_cell(col, row) && self.board[row][col] == Cell::Empty && self.state == State::Playing {
             self.board[row][col] = input;
             self.cells_filled += 1;
+            let sos_made = self.sos_made(col, row);
             match self.turn {
-                Turn::Left => self.left_score += self.sos_made(col, row),
-                Turn::Right => self.right_score += self.sos_made(col, row)
+                Turn::Left => self.left_score += sos_made,
+                Turn::Right => self.right_score += sos_made
             }
             self.recording.add_move(input, row, col);
             self.state = self.game_type.as_ref().unwrap().get_game_state(self);
-            self.switch_turn();
+            if sos_made == 0 {
+                self.switch_turn();
+            }
         }
     }
 
